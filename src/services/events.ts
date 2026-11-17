@@ -12,6 +12,11 @@ export interface CreateEventInput {
   };
 }
 
+function toIso(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  return new Date(date).toISOString();
+}
+
 export async function createEvent(data: CreateEventInput, client = db) {
   return await client.transaction(async (tx) => {
     const [event] = await tx
@@ -43,7 +48,10 @@ export async function createEvent(data: CreateEventInput, client = db) {
       .returning();
 
     return {
-      ...event,
+      id: event.id,
+      name: event.name,
+      startsAt: toIso(event.startsAt)!,
+      createdAt: toIso(event.createdAt)!,
       ticketTypes: createdTicketTypes,
       tickets: createdTicketTypes,
     };
@@ -67,7 +75,10 @@ export async function getEvents(client = db) {
   return allEvents.map((event) => {
     const types = allTypes.filter((t) => t.eventId === event.id);
     return {
-      ...event,
+      id: event.id,
+      name: event.name,
+      startsAt: toIso(event.startsAt)!,
+      createdAt: toIso(event.createdAt)!,
       ticketTypes: types,
       tickets: types,
     };
@@ -88,7 +99,10 @@ export async function getEventById(id: string, client = db) {
     .where(eq(ticketTypes.eventId, id));
 
   return {
-    ...event,
+    id: event.id,
+    name: event.name,
+    startsAt: toIso(event.startsAt)!,
+    createdAt: toIso(event.createdAt)!,
     ticketTypes: types,
     tickets: types,
   };

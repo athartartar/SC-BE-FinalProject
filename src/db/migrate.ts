@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function runMigrations() {
-  const migrationClient = postgres(config.DATABASE_URL, { max: 1 });
+  const migrationClient = postgres(config.DATABASE_URL, {
+    max: 1,
+    onnotice: () => {},
+  });
   const migrationDb = drizzle(migrationClient);
   const migrationsFolder =
     process.env.MIGRATIONS_FOLDER || path.resolve(__dirname, "../../drizzle");

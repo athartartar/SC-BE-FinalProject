@@ -6,6 +6,11 @@ import { config } from "../config.js";
 import { AppError } from "./errors.js";
 import { expireDueOrders } from "./expiry.js";
 
+function toIso(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  return new Date(date).toISOString();
+}
+
 export async function createOrder(
   buyerId: string,
   ticketTypeId: string,
@@ -102,12 +107,12 @@ export async function createOrder(
       totalPrice: o.total_price,
       total_price: o.total_price,
       status: o.status,
-      expiresAt: o.expires_at,
-      expires_at: o.expires_at,
-      paidAt: o.paid_at,
-      paid_at: o.paid_at,
-      createdAt: o.created_at,
-      created_at: o.created_at,
+      expiresAt: toIso(o.expires_at)!,
+      expires_at: toIso(o.expires_at)!,
+      paidAt: toIso(o.paid_at),
+      paid_at: toIso(o.paid_at),
+      createdAt: toIso(o.created_at)!,
+      created_at: toIso(o.created_at)!,
     };
   });
 }
@@ -181,18 +186,18 @@ export async function cancelOrder(
       totalPrice: o.total_price,
       total_price: o.total_price,
       status: o.status,
-      expiresAt: o.expires_at,
-      expires_at: o.expires_at,
-      paidAt: o.paid_at,
-      paid_at: o.paid_at,
-      createdAt: o.created_at,
-      created_at: o.created_at,
+      expiresAt: toIso(o.expires_at)!,
+      expires_at: toIso(o.expires_at)!,
+      paidAt: toIso(o.paid_at),
+      paid_at: toIso(o.paid_at),
+      createdAt: toIso(o.created_at)!,
+      created_at: toIso(o.created_at)!,
     };
   });
 }
 
 export async function payOrder(orderId: string, client = db) {
-  return await client.transaction(async (tx) => {
+  const result = await client.transaction(async (tx) => {
     const updatedRows = await tx.execute<{
       id: string;
       buyer_id: string;
@@ -228,29 +233,40 @@ export async function payOrder(orderId: string, client = db) {
           VALUES (${order.id}, ${code}, ${seq})
           RETURNING *
         `);
-        insertedTickets.push(ticketRows[0]);
+        const t = ticketRows[0];
+        insertedTickets.push({
+          id: t.id,
+          orderId: t.order_id,
+          order_id: t.order_id,
+          code: t.code,
+          seq: t.seq,
+          createdAt: toIso(t.created_at)!,
+          created_at: toIso(t.created_at)!,
+        });
       }
 
       return {
-        id: order.id,
-        buyerId: order.buyer_id,
-        buyer_id: order.buyer_id,
-        eventId: order.event_id,
-        event_id: order.event_id,
-        ticketTypeId: order.ticket_type_id,
-        ticket_type_id: order.ticket_type_id,
-        quantity: order.quantity,
-        totalPrice: order.total_price,
-        total_price: order.total_price,
-        status: order.status,
-        expiresAt: order.expires_at,
-        expires_at: order.expires_at,
-        paidAt: order.paid_at,
-        paid_at: order.paid_at,
-        createdAt: order.created_at,
-        created_at: order.created_at,
-        tickets: insertedTickets,
-        ticketCodes: insertedTickets.map((t) => t.code),
+        order: {
+          id: order.id,
+          buyerId: order.buyer_id,
+          buyer_id: order.buyer_id,
+          eventId: order.event_id,
+          event_id: order.event_id,
+          ticketTypeId: order.ticket_type_id,
+          ticket_type_id: order.ticket_type_id,
+          quantity: order.quantity,
+          totalPrice: order.total_price,
+          total_price: order.total_price,
+          status: order.status,
+          expiresAt: toIso(order.expires_at)!,
+          expires_at: toIso(order.expires_at)!,
+          paidAt: toIso(order.paid_at),
+          paid_at: toIso(order.paid_at),
+          createdAt: toIso(order.created_at)!,
+          created_at: toIso(order.created_at)!,
+          tickets: insertedTickets,
+          ticketCodes: insertedTickets.map((t) => t.code),
+        },
       };
     }
 
@@ -273,7 +289,7 @@ export async function payOrder(orderId: string, client = db) {
     `);
 
     if (orderRows.length === 0) {
-      throw new AppError(404, "NOT_FOUND", "Order not found");
+      return { notFound: true };
     }
 
     const order = orderRows[0];
@@ -292,35 +308,47 @@ export async function payOrder(orderId: string, client = db) {
         ORDER BY seq ASC
       `);
 
+      const formattedTickets = existingTickets.map((t) => ({
+        id: t.id,
+        orderId: t.order_id,
+        order_id: t.order_id,
+        code: t.code,
+        seq: t.seq,
+        createdAt: toIso(t.created_at)!,
+        created_at: toIso(t.created_at)!,
+      }));
+
       return {
-        id: order.id,
-        buyerId: order.buyer_id,
-        buyer_id: order.buyer_id,
-        eventId: order.event_id,
-        event_id: order.event_id,
-        ticketTypeId: order.ticket_type_id,
-        ticket_type_id: order.ticket_type_id,
-        quantity: order.quantity,
-        totalPrice: order.total_price,
-        total_price: order.total_price,
-        status: order.status,
-        expiresAt: order.expires_at,
-        expires_at: order.expires_at,
-        paidAt: order.paid_at,
-        paid_at: order.paid_at,
-        createdAt: order.created_at,
-        created_at: order.created_at,
-        tickets: existingTickets,
-        ticketCodes: existingTickets.map((t) => t.code),
+        order: {
+          id: order.id,
+          buyerId: order.buyer_id,
+          buyer_id: order.buyer_id,
+          eventId: order.event_id,
+          event_id: order.event_id,
+          ticketTypeId: order.ticket_type_id,
+          ticket_type_id: order.ticket_type_id,
+          quantity: order.quantity,
+          totalPrice: order.total_price,
+          total_price: order.total_price,
+          status: order.status,
+          expiresAt: toIso(order.expires_at)!,
+          expires_at: toIso(order.expires_at)!,
+          paidAt: toIso(order.paid_at),
+          paid_at: toIso(order.paid_at),
+          createdAt: toIso(order.created_at)!,
+          created_at: toIso(order.created_at)!,
+          tickets: formattedTickets,
+          ticketCodes: formattedTickets.map((t) => t.code),
+        },
       };
     }
 
     if (order.status === "cancelled") {
-      throw new AppError(409, "ORDER_CANCELLED", "Order has been cancelled");
+      return { isCancelled: true };
     }
 
     if (order.status === "expired") {
-      throw new AppError(409, "ORDER_EXPIRED", "Order has expired");
+      return { isExpired: true };
     }
 
     if (order.status === "pending") {
@@ -336,11 +364,26 @@ export async function payOrder(orderId: string, client = db) {
         WHERE id = ${order.ticket_type_id}
       `);
 
-      throw new AppError(409, "ORDER_EXPIRED", "Order has expired");
+      return { isExpired: true };
     }
 
-    throw new AppError(409, "CONFLICT", "Order cannot be paid");
+    return { conflict: true };
   });
+
+  if (result.notFound) {
+    throw new AppError(404, "NOT_FOUND", "Order not found");
+  }
+  if (result.isCancelled) {
+    throw new AppError(409, "ORDER_CANCELLED", "Order has been cancelled");
+  }
+  if (result.isExpired) {
+    throw new AppError(409, "ORDER_EXPIRED", "Order has expired");
+  }
+  if (result.conflict) {
+    throw new AppError(409, "CONFLICT", "Order cannot be paid");
+  }
+
+  return result.order!;
 }
 
 export async function getOrdersByBuyer(buyerId: string, client = db) {
@@ -390,7 +433,18 @@ export async function getOrdersByBuyer(buyerId: string, client = db) {
     .orderBy(asc(tickets.seq));
 
   return orderRows.map((o) => {
-    const oTickets = ticketList.filter((t) => t.orderId === o.id);
+    const oTickets = ticketList
+      .filter((t) => t.orderId === o.id)
+      .map((t) => ({
+        id: t.id,
+        orderId: t.orderId,
+        order_id: t.orderId,
+        code: t.code,
+        seq: t.seq,
+        createdAt: toIso(t.createdAt)!,
+        created_at: toIso(t.createdAt)!,
+      }));
+
     return {
       id: o.id,
       buyerId: o.buyer_id,
@@ -407,12 +461,12 @@ export async function getOrdersByBuyer(buyerId: string, client = db) {
       totalPrice: o.total_price,
       total_price: o.total_price,
       status: o.status,
-      expiresAt: o.expires_at,
-      expires_at: o.expires_at,
-      paidAt: o.paid_at,
-      paid_at: o.paid_at,
-      createdAt: o.created_at,
-      created_at: o.created_at,
+      expiresAt: toIso(o.expires_at)!,
+      expires_at: toIso(o.expires_at)!,
+      paidAt: toIso(o.paid_at),
+      paid_at: toIso(o.paid_at),
+      createdAt: toIso(o.created_at)!,
+      created_at: toIso(o.created_at)!,
       tickets: oTickets,
       ticketCodes: oTickets.map((t) => t.code),
     };
@@ -472,6 +526,16 @@ export async function getOrderById(
     .where(eq(tickets.orderId, orderId))
     .orderBy(asc(tickets.seq));
 
+  const formattedTickets = oTickets.map((t) => ({
+    id: t.id,
+    orderId: t.orderId,
+    order_id: t.orderId,
+    code: t.code,
+    seq: t.seq,
+    createdAt: toIso(t.createdAt)!,
+    created_at: toIso(t.createdAt)!,
+  }));
+
   return {
     id: o.id,
     buyerId: o.buyer_id,
@@ -488,13 +552,13 @@ export async function getOrderById(
     totalPrice: o.total_price,
     total_price: o.total_price,
     status: o.status,
-    expiresAt: o.expires_at,
-    expires_at: o.expires_at,
-    paidAt: o.paid_at,
-    paid_at: o.paid_at,
-    createdAt: o.created_at,
-    created_at: o.created_at,
-    tickets: oTickets,
-    ticketCodes: oTickets.map((t) => t.code),
+    expiresAt: toIso(o.expires_at)!,
+    expires_at: toIso(o.expires_at)!,
+    paidAt: toIso(o.paid_at),
+    paid_at: toIso(o.paid_at),
+    createdAt: toIso(o.created_at)!,
+    created_at: toIso(o.created_at)!,
+    tickets: formattedTickets,
+    ticketCodes: formattedTickets.map((t) => t.code),
   };
 }
