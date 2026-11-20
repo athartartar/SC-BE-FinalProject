@@ -9,6 +9,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    sql`TRUNCATE TABLE events, ticket_types, orders, tickets CASCADE;`
+    sql`TRUNCATE TABLE events, ticket_types, orders, tickets, webhook_events CASCADE;`
   );
 });

@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import { app } from "../src/app.js";
+import { config } from "../src/config.js";
 
 export async function createEventHelper(
   options: {
@@ -87,6 +89,33 @@ export async function getOrderHelper(orderId: string, buyerId: string) {
 
 export async function getEventHelper(eventId: string) {
   const res = await app.request(`/events/${eventId}`);
+  const data = await res.json();
+  return { res, data };
+}
+
+export async function sendWebhookHelper(
+  payload: any,
+  secret = config.WEBHOOK_SECRET,
+  signatureOverride?: string
+) {
+  const rawBody = typeof payload === "string" ? payload : JSON.stringify(payload);
+  const signature =
+    signatureOverride !== undefined
+      ? signatureOverride
+      : crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (signature !== "") {
+    headers["X-Signature"] = signature;
+  }
+
+  const res = await app.request("/webhooks/payment", {
+    method: "POST",
+    headers,
+    body: rawBody,
+  });
   const data = await res.json();
   return { res, data };
 }
