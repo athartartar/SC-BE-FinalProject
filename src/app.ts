@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { eventsRouter } from "./routes/events.js";
 import { ordersRouter } from "./routes/orders.js";
+import { webhooksRouter } from "./routes/webhooks.js";
 import { AppError } from "./services/errors.js";
 
 export function createApp(customDb = db) {
@@ -43,6 +44,7 @@ export function createApp(customDb = db) {
 
   app.route("/events", eventsRouter);
   app.route("/orders", ordersRouter);
+  app.route("/webhooks", webhooksRouter);
 
   return app;
 }

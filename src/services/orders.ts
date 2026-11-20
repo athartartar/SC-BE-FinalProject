@@ -196,78 +196,162 @@ export async function cancelOrder(
   });
 }
 
-export async function payOrder(orderId: string, client = db) {
-  const result = await client.transaction(async (tx) => {
-    const updatedRows = await tx.execute<{
+type DBTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function executeOrderPayment(tx: DBTransaction, orderId: string) {
+  const updatedRows = await tx.execute<{
+    id: string;
+    buyer_id: string;
+    event_id: string;
+    ticket_type_id: string;
+    quantity: number;
+    total_price: number;
+    status: string;
+    expires_at: Date;
+    paid_at: Date;
+    created_at: Date;
+  }>(sql`
+    UPDATE orders
+    SET status = 'paid', paid_at = now()
+    WHERE id = ${orderId} AND status = 'pending' AND expires_at > now()
+    RETURNING *
+  `);
+
+  if (updatedRows.length === 0) {
+    return null;
+  }
+
+  const order = updatedRows[0];
+  const insertedTickets = [];
+
+  for (let seq = 1; seq <= order.quantity; seq++) {
+    const code = `TKT-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
+    const ticketRows = await tx.execute<{
       id: string;
-      buyer_id: string;
-      event_id: string;
-      ticket_type_id: string;
-      quantity: number;
-      total_price: number;
-      status: string;
-      expires_at: Date;
-      paid_at: Date;
+      order_id: string;
+      code: string;
+      seq: number;
       created_at: Date;
     }>(sql`
-      UPDATE orders
-      SET status = 'paid', paid_at = now()
-      WHERE id = ${orderId} AND status = 'pending' AND expires_at > now()
+      INSERT INTO tickets (order_id, code, seq)
+      VALUES (${order.id}, ${code}, ${seq})
       RETURNING *
     `);
+    const t = ticketRows[0];
+    insertedTickets.push({
+      id: t.id,
+      orderId: t.order_id,
+      order_id: t.order_id,
+      code: t.code,
+      seq: t.seq,
+      createdAt: toIso(t.created_at)!,
+      created_at: toIso(t.created_at)!,
+    });
+  }
 
-    if (updatedRows.length > 0) {
-      const order = updatedRows[0];
-      const insertedTickets = [];
+  return {
+    order: {
+      id: order.id,
+      buyerId: order.buyer_id,
+      buyer_id: order.buyer_id,
+      eventId: order.event_id,
+      event_id: order.event_id,
+      ticketTypeId: order.ticket_type_id,
+      ticket_type_id: order.ticket_type_id,
+      quantity: order.quantity,
+      totalPrice: order.total_price,
+      total_price: order.total_price,
+      status: order.status,
+      expiresAt: toIso(order.expires_at)!,
+      expires_at: toIso(order.expires_at)!,
+      paidAt: toIso(order.paid_at),
+      paid_at: toIso(order.paid_at),
+      createdAt: toIso(order.created_at)!,
+      created_at: toIso(order.created_at)!,
+      tickets: insertedTickets,
+      ticketCodes: insertedTickets.map((t) => t.code),
+    },
+  };
+}
 
-      for (let seq = 1; seq <= order.quantity; seq++) {
-        const code = `TKT-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
-        const ticketRows = await tx.execute<{
-          id: string;
-          order_id: string;
-          code: string;
-          seq: number;
-          created_at: Date;
-        }>(sql`
-          INSERT INTO tickets (order_id, code, seq)
-          VALUES (${order.id}, ${code}, ${seq})
-          RETURNING *
-        `);
-        const t = ticketRows[0];
-        insertedTickets.push({
-          id: t.id,
-          orderId: t.order_id,
-          order_id: t.order_id,
-          code: t.code,
-          seq: t.seq,
-          createdAt: toIso(t.created_at)!,
-          created_at: toIso(t.created_at)!,
-        });
+export async function processPaymentWebhook(
+  payload: { eventId: string; orderId: string; status: "success" | "failed" },
+  client = db
+) {
+  return await client.transaction(async (tx) => {
+    const existingEvents = await tx.execute<{ outcome: string }>(sql`
+      SELECT outcome
+      FROM webhook_events
+      WHERE provider_event_id = ${payload.eventId}
+    `);
+
+    if (existingEvents.length > 0) {
+      return { outcome: existingEvents[0].outcome };
+    }
+
+    const orderRows = await tx.execute<{
+      id: string;
+      status: string;
+      expires_at: Date;
+    }>(sql`
+      SELECT id, status, expires_at
+      FROM orders
+      WHERE id = ${payload.orderId}
+      FOR UPDATE
+    `);
+
+    if (orderRows.length === 0) {
+      throw new AppError(404, "NOT_FOUND", "Order not found");
+    }
+
+    const order = orderRows[0];
+    let outcome: string;
+
+    if (payload.status === "failed") {
+      outcome = "RECORDED";
+    } else if (order.status === "paid") {
+      outcome = "ALREADY_PAID";
+    } else if (order.status === "cancelled" || order.status === "expired") {
+      outcome = "LATE_NOT_ISSUED";
+    } else {
+      const paid = await executeOrderPayment(tx, order.id);
+      if (paid) {
+        outcome = "PAID";
+      } else {
+        outcome = "LATE_NOT_ISSUED";
       }
+    }
 
-      return {
-        order: {
-          id: order.id,
-          buyerId: order.buyer_id,
-          buyer_id: order.buyer_id,
-          eventId: order.event_id,
-          event_id: order.event_id,
-          ticketTypeId: order.ticket_type_id,
-          ticket_type_id: order.ticket_type_id,
-          quantity: order.quantity,
-          totalPrice: order.total_price,
-          total_price: order.total_price,
-          status: order.status,
-          expiresAt: toIso(order.expires_at)!,
-          expires_at: toIso(order.expires_at)!,
-          paidAt: toIso(order.paid_at),
-          paid_at: toIso(order.paid_at),
-          createdAt: toIso(order.created_at)!,
-          created_at: toIso(order.created_at)!,
-          tickets: insertedTickets,
-          ticketCodes: insertedTickets.map((t) => t.code),
-        },
-      };
+    const inserted = await tx.execute<{ outcome: string }>(sql`
+      INSERT INTO webhook_events (provider_event_id, order_id, payload, outcome)
+      VALUES (
+        ${payload.eventId},
+        ${payload.orderId},
+        ${JSON.stringify(payload)}::jsonb,
+        ${outcome}
+      )
+      ON CONFLICT (provider_event_id) DO NOTHING
+      RETURNING outcome
+    `);
+
+    if (inserted.length === 0) {
+      const [recheck] = await tx.execute<{ outcome: string }>(sql`
+        SELECT outcome
+        FROM webhook_events
+        WHERE provider_event_id = ${payload.eventId}
+      `);
+      return { outcome: recheck?.outcome ?? outcome };
+    }
+
+    return { outcome };
+  });
+}
+
+export async function payOrder(orderId: string, client = db) {
+  const result = await client.transaction(async (tx) => {
+    const paidResult = await executeOrderPayment(tx, orderId);
+    if (paidResult) {
+      return paidResult;
     }
 
     const orderRows = await tx.execute<{
@@ -370,20 +454,20 @@ export async function payOrder(orderId: string, client = db) {
     return { conflict: true };
   });
 
-  if (result.notFound) {
+  if ("notFound" in result && result.notFound) {
     throw new AppError(404, "NOT_FOUND", "Order not found");
   }
-  if (result.isCancelled) {
+  if ("isCancelled" in result && result.isCancelled) {
     throw new AppError(409, "ORDER_CANCELLED", "Order has been cancelled");
   }
-  if (result.isExpired) {
+  if ("isExpired" in result && result.isExpired) {
     throw new AppError(409, "ORDER_EXPIRED", "Order has expired");
   }
-  if (result.conflict) {
+  if ("conflict" in result && result.conflict) {
     throw new AppError(409, "CONFLICT", "Order cannot be paid");
   }
 
-  return result.order!;
+  return (result as { order: any }).order;
 }
 
 export async function getOrdersByBuyer(buyerId: string, client = db) {
