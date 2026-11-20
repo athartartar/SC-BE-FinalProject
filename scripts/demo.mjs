@@ -307,7 +307,7 @@ async function main() {
     headers: { "X-Buyer-Id": buyerId },
   });
   if (s7 !== 200 || !Array.isArray(data7)) fail("[7] Riwayat pesanan");
-  const eventOrders = data7.filter((o) => o.eventId === eventId || o.event_id === eventId);
+  const eventOrders = data7.filter((o) => o.eventId === eventId);
   const buyerOrder = eventOrders[0];
   const orderCount = eventOrders.length;
   const ticketCount = buyerOrder?.tickets?.length || buyerOrder?.quantity || 0;
@@ -419,7 +419,7 @@ async function main() {
   const { data: buyer2List } = await request("GET", "/orders", { headers: { "X-Buyer-Id": buyer2Id }, print: false });
   const { data: buyer3List } = await request("GET", "/orders", { headers: { "X-Buyer-Id": buyerCancelId }, print: false });
   const demoOrders = [...(Array.isArray(buyer1List) ? buyer1List : []), ...(Array.isArray(buyer2List) ? buyer2List : []), ...(Array.isArray(buyer3List) ? buyer3List : [])].filter(
-    (o) => o.eventId === eventId || o.event_id === eventId
+    (o) => o.eventId === eventId
   );
 
   const { data: finalCheckEventData } = await request("GET", `/events/${eventId}`, { print: false });
@@ -427,7 +427,7 @@ async function main() {
 
   const quotaRows = finalTicketTypes.map((tt) => {
     const ordersForType = demoOrders.filter(
-      (o) => o.ticketTypeId === tt.id || o.ticket_type_id === tt.id
+      (o) => o.ticketTypeId === tt.id
     );
     const terjual = ordersForType
       .filter((o) => o.status === "paid")

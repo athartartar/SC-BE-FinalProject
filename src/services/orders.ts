@@ -11,6 +11,102 @@ function toIso(date: Date | string | null | undefined): string | null {
   return new Date(date).toISOString();
 }
 
+export interface FormattedTicket {
+  id: string;
+  orderId: string;
+  code: string;
+  seq: number;
+  createdAt: string;
+}
+
+export function formatTicket(t: {
+  id: string;
+  orderId?: string;
+  order_id?: string;
+  code: string;
+  seq: number;
+  createdAt?: Date | string | null;
+  created_at?: Date | string | null;
+}): FormattedTicket {
+  return {
+    id: t.id,
+    orderId: t.orderId ?? t.order_id!,
+    code: t.code,
+    seq: t.seq,
+    createdAt: toIso(t.createdAt ?? t.created_at)!,
+  };
+}
+
+export interface FormattedOrder {
+  id: string;
+  buyerId: string;
+  eventId: string;
+  eventName?: string;
+  ticketTypeId: string;
+  ticketTypeName?: string;
+  quantity: number;
+  totalPrice: number;
+  status: string;
+  expiresAt: string;
+  paidAt: string | null;
+  createdAt: string;
+  tickets?: FormattedTicket[];
+  ticketCodes?: string[];
+}
+
+export function formatOrder(
+  o: {
+    id: string;
+    buyerId?: string;
+    buyer_id?: string;
+    eventId?: string;
+    event_id?: string;
+    ticketTypeId?: string;
+    ticket_type_id?: string;
+    quantity: number;
+    totalPrice?: number;
+    total_price?: number;
+    status: string;
+    expiresAt?: Date | string | null;
+    expires_at?: Date | string | null;
+    paidAt?: Date | string | null;
+    paid_at?: Date | string | null;
+    createdAt?: Date | string | null;
+    created_at?: Date | string | null;
+  },
+  extras?: {
+    eventName?: string;
+    ticketTypeName?: string;
+    tickets?: FormattedTicket[];
+  }
+): FormattedOrder {
+  const result: FormattedOrder = {
+    id: o.id,
+    buyerId: o.buyerId ?? o.buyer_id!,
+    eventId: o.eventId ?? o.event_id!,
+    ticketTypeId: o.ticketTypeId ?? o.ticket_type_id!,
+    quantity: o.quantity,
+    totalPrice: o.totalPrice ?? o.total_price!,
+    status: o.status,
+    expiresAt: toIso(o.expiresAt ?? o.expires_at)!,
+    paidAt: toIso(o.paidAt ?? o.paid_at),
+    createdAt: toIso(o.createdAt ?? o.created_at)!,
+  };
+
+  if (extras?.eventName !== undefined) {
+    result.eventName = extras.eventName;
+  }
+  if (extras?.ticketTypeName !== undefined) {
+    result.ticketTypeName = extras.ticketTypeName;
+  }
+  if (extras?.tickets !== undefined) {
+    result.tickets = extras.tickets;
+    result.ticketCodes = extras.tickets.map((t) => t.code);
+  }
+
+  return result;
+}
+
 export async function createOrder(
   buyerId: string,
   ticketTypeId: string,
@@ -94,26 +190,7 @@ export async function createOrder(
       RETURNING *
     `);
 
-    const o = orderRows[0];
-    return {
-      id: o.id,
-      buyerId: o.buyer_id,
-      buyer_id: o.buyer_id,
-      eventId: o.event_id,
-      event_id: o.event_id,
-      ticketTypeId: o.ticket_type_id,
-      ticket_type_id: o.ticket_type_id,
-      quantity: o.quantity,
-      totalPrice: o.total_price,
-      total_price: o.total_price,
-      status: o.status,
-      expiresAt: toIso(o.expires_at)!,
-      expires_at: toIso(o.expires_at)!,
-      paidAt: toIso(o.paid_at),
-      paid_at: toIso(o.paid_at),
-      createdAt: toIso(o.created_at)!,
-      created_at: toIso(o.created_at)!,
-    };
+    return formatOrder(orderRows[0]);
   });
 }
 
@@ -173,26 +250,7 @@ export async function cancelOrder(
       WHERE id = ${order.ticket_type_id}
     `);
 
-    const o = updatedRows[0];
-    return {
-      id: o.id,
-      buyerId: o.buyer_id,
-      buyer_id: o.buyer_id,
-      eventId: o.event_id,
-      event_id: o.event_id,
-      ticketTypeId: o.ticket_type_id,
-      ticket_type_id: o.ticket_type_id,
-      quantity: o.quantity,
-      totalPrice: o.total_price,
-      total_price: o.total_price,
-      status: o.status,
-      expiresAt: toIso(o.expires_at)!,
-      expires_at: toIso(o.expires_at)!,
-      paidAt: toIso(o.paid_at),
-      paid_at: toIso(o.paid_at),
-      createdAt: toIso(o.created_at)!,
-      created_at: toIso(o.created_at)!,
-    };
+    return formatOrder(updatedRows[0]);
   });
 }
 
@@ -222,7 +280,7 @@ export async function executeOrderPayment(tx: DBTransaction, orderId: string) {
   }
 
   const order = updatedRows[0];
-  const insertedTickets = [];
+  const insertedTickets: FormattedTicket[] = [];
 
   for (let seq = 1; seq <= order.quantity; seq++) {
     const code = `TKT-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
@@ -237,40 +295,11 @@ export async function executeOrderPayment(tx: DBTransaction, orderId: string) {
       VALUES (${order.id}, ${code}, ${seq})
       RETURNING *
     `);
-    const t = ticketRows[0];
-    insertedTickets.push({
-      id: t.id,
-      orderId: t.order_id,
-      order_id: t.order_id,
-      code: t.code,
-      seq: t.seq,
-      createdAt: toIso(t.created_at)!,
-      created_at: toIso(t.created_at)!,
-    });
+    insertedTickets.push(formatTicket(ticketRows[0]));
   }
 
   return {
-    order: {
-      id: order.id,
-      buyerId: order.buyer_id,
-      buyer_id: order.buyer_id,
-      eventId: order.event_id,
-      event_id: order.event_id,
-      ticketTypeId: order.ticket_type_id,
-      ticket_type_id: order.ticket_type_id,
-      quantity: order.quantity,
-      totalPrice: order.total_price,
-      total_price: order.total_price,
-      status: order.status,
-      expiresAt: toIso(order.expires_at)!,
-      expires_at: toIso(order.expires_at)!,
-      paidAt: toIso(order.paid_at),
-      paid_at: toIso(order.paid_at),
-      createdAt: toIso(order.created_at)!,
-      created_at: toIso(order.created_at)!,
-      tickets: insertedTickets,
-      ticketCodes: insertedTickets.map((t) => t.code),
-    },
+    order: formatOrder(order, { tickets: insertedTickets }),
   };
 }
 
@@ -392,38 +421,10 @@ export async function payOrder(orderId: string, client = db) {
         ORDER BY seq ASC
       `);
 
-      const formattedTickets = existingTickets.map((t) => ({
-        id: t.id,
-        orderId: t.order_id,
-        order_id: t.order_id,
-        code: t.code,
-        seq: t.seq,
-        createdAt: toIso(t.created_at)!,
-        created_at: toIso(t.created_at)!,
-      }));
+      const formattedTickets = existingTickets.map(formatTicket);
 
       return {
-        order: {
-          id: order.id,
-          buyerId: order.buyer_id,
-          buyer_id: order.buyer_id,
-          eventId: order.event_id,
-          event_id: order.event_id,
-          ticketTypeId: order.ticket_type_id,
-          ticket_type_id: order.ticket_type_id,
-          quantity: order.quantity,
-          totalPrice: order.total_price,
-          total_price: order.total_price,
-          status: order.status,
-          expiresAt: toIso(order.expires_at)!,
-          expires_at: toIso(order.expires_at)!,
-          paidAt: toIso(order.paid_at),
-          paid_at: toIso(order.paid_at),
-          createdAt: toIso(order.created_at)!,
-          created_at: toIso(order.created_at)!,
-          tickets: formattedTickets,
-          ticketCodes: formattedTickets.map((t) => t.code),
-        },
+        order: formatOrder(order, { tickets: formattedTickets }),
       };
     }
 
@@ -467,7 +468,7 @@ export async function payOrder(orderId: string, client = db) {
     throw new AppError(409, "CONFLICT", "Order cannot be paid");
   }
 
-  return (result as { order: any }).order;
+  return (result as { order: FormattedOrder }).order;
 }
 
 export async function getOrdersByBuyer(buyerId: string, client = db) {
@@ -519,41 +520,13 @@ export async function getOrdersByBuyer(buyerId: string, client = db) {
   return orderRows.map((o) => {
     const oTickets = ticketList
       .filter((t) => t.orderId === o.id)
-      .map((t) => ({
-        id: t.id,
-        orderId: t.orderId,
-        order_id: t.orderId,
-        code: t.code,
-        seq: t.seq,
-        createdAt: toIso(t.createdAt)!,
-        created_at: toIso(t.createdAt)!,
-      }));
+      .map(formatTicket);
 
-    return {
-      id: o.id,
-      buyerId: o.buyer_id,
-      buyer_id: o.buyer_id,
-      eventId: o.event_id,
-      event_id: o.event_id,
+    return formatOrder(o, {
       eventName: o.event_name,
-      event_name: o.event_name,
-      ticketTypeId: o.ticket_type_id,
-      ticket_type_id: o.ticket_type_id,
       ticketTypeName: o.ticket_type_name,
-      ticket_type_name: o.ticket_type_name,
-      quantity: o.quantity,
-      totalPrice: o.total_price,
-      total_price: o.total_price,
-      status: o.status,
-      expiresAt: toIso(o.expires_at)!,
-      expires_at: toIso(o.expires_at)!,
-      paidAt: toIso(o.paid_at),
-      paid_at: toIso(o.paid_at),
-      createdAt: toIso(o.created_at)!,
-      created_at: toIso(o.created_at)!,
       tickets: oTickets,
-      ticketCodes: oTickets.map((t) => t.code),
-    };
+    });
   });
 }
 
@@ -610,39 +583,11 @@ export async function getOrderById(
     .where(eq(tickets.orderId, orderId))
     .orderBy(asc(tickets.seq));
 
-  const formattedTickets = oTickets.map((t) => ({
-    id: t.id,
-    orderId: t.orderId,
-    order_id: t.orderId,
-    code: t.code,
-    seq: t.seq,
-    createdAt: toIso(t.createdAt)!,
-    created_at: toIso(t.createdAt)!,
-  }));
+  const formattedTickets = oTickets.map(formatTicket);
 
-  return {
-    id: o.id,
-    buyerId: o.buyer_id,
-    buyer_id: o.buyer_id,
-    eventId: o.event_id,
-    event_id: o.event_id,
+  return formatOrder(o, {
     eventName: o.event_name,
-    event_name: o.event_name,
-    ticketTypeId: o.ticket_type_id,
-    ticket_type_id: o.ticket_type_id,
     ticketTypeName: o.ticket_type_name,
-    ticket_type_name: o.ticket_type_name,
-    quantity: o.quantity,
-    totalPrice: o.total_price,
-    total_price: o.total_price,
-    status: o.status,
-    expiresAt: toIso(o.expires_at)!,
-    expires_at: toIso(o.expires_at)!,
-    paidAt: toIso(o.paid_at),
-    paid_at: toIso(o.paid_at),
-    createdAt: toIso(o.created_at)!,
-    created_at: toIso(o.created_at)!,
     tickets: formattedTickets,
-    ticketCodes: formattedTickets.map((t) => t.code),
-  };
+  });
 }
