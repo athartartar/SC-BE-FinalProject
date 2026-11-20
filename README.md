@@ -26,6 +26,11 @@ npm install
 npm run demo
 ```
 
+Untuk menjalankan demo mode presentasi (menunggu penekanan Enter di setiap langkah):
+- **Bash / Linux / macOS / Git Bash:** `DEMO_PAUSE=1 npm run demo`
+- **PowerShell (Windows):** `$env:DEMO_PAUSE="1"; npm run demo`
+- **Command Prompt (Windows CMD):** `set DEMO_PAUSE=1&& npm run demo`
+
 > **Penting:** Semua perintah `npm` harus dijalankan dari dalam folder proyek.
 
 ## Prasyarat
