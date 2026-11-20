@@ -9,6 +9,7 @@ import {
   unique,
   check,
   index,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const orderStatusEnum = pgEnum("order_status", [
@@ -85,4 +86,19 @@ export const tickets = pgTable(
   (table) => [
     unique("tickets_order_id_seq_unique").on(table.orderId, table.seq),
   ]
+);
+
+export const webhookEvents = pgTable(
+  "webhook_events",
+  {
+    providerEventId: text("provider_event_id").primaryKey(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id),
+    payload: jsonb("payload").notNull(),
+    outcome: text("outcome").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  }
 );
