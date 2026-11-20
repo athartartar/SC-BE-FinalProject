@@ -1,0 +1,14 @@
+{
+  "name": "Konser Musik Akbar",
+  "startsAt": "2026-12-31T20:00:00.000Z",
+  "tickets": {
+    "reguler": {
+      "price": 75000,
+      "quota": 100
+    },
+    "vip": {
+      "price": 200000,
+      "quota": 25
+    }
+  }
+}

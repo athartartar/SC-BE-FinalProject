@@ -6,6 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "demo": "node scripts/demo.mjs",
+    "webhook:send": "node scripts/send-webhook.mjs",
     "test": "vitest run",
     "load:test": "node scripts/load-test.mjs",
     "db:generate": "drizzle-kit generate",
